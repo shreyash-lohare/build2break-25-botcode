@@ -52,30 +52,23 @@ This command will:
 
 ## 🧩 How It Works
 
-Generating a Video
+Generating a Video-
+	
+	Enter API Keys (Step 1)
+		Input your Google Gemini API key
+		Input your Supabase API key
+		Input your ElevenLabs API key
+		Click "Continue to Upload"
 
-Enter API Keys (Step 1)
+	Upload PDF (Step 2)
+		Click the upload area or drag-and-drop your PDF
+		Maximum file size: 20 MB
+		Click "Generate Video Summary"
 
-Input your Google Gemini API key
-Input your Supabase API key
-Input your ElevenLabs API key
-Click "Continue to Upload"
-
-
-Upload PDF (Step 2)
-
-Click the upload area or drag-and-drop your PDF
-Maximum file size: 20 MB
-Click "Generate Video Summary"
-
-
-View & Download (Step 3)
-
-Watch the generated video preview
-Download the MP4 file
-Generate another video or change API keys
-
-Each role is an n8n workflow connected through triggers and memory nodes.
+	View & Download (Step 3)-
+		Watch the generated video preview
+		Download the MP4 file
+		Generate another video or change API keys
 
 ### 🧪 Test Workflow
 
