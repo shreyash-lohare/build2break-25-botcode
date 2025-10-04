@@ -1,0 +1,449 @@
+{
+  "nodes": [
+    {
+      "id": "incoming-request",
+      "name": "Incoming Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-600, 200],
+      "parameters": {
+        "path": "generate",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "binaryData": true
+        }
+      },
+      "webhookId": "build2break-generate"
+    },
+    {
+      "id": "normalize-input",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-320, 200],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "prompt-field",
+              "name": "prompt",
+              "value": "={{ $json.body?.prompt ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "google-field",
+              "name": "google_api_key",
+              "value": "={{ $json.body?.gemini_api_key ?? $json.body?.google_api_key ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "supabase-field",
+              "name": "supabase_api_key",
+              "value": "={{ $json.body?.supabase_api_key ?? '' }}",
+              "type": "string"
+            },
+            {
+              "id": "eleven-field",
+              "name": "elevenlabs_api_key",
+              "value": "={{ $json.body?.elevenlabs_api_key ?? '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {
+          "keepOnlySet": false
+        }
+      }
+    },
+    {
+      "id": "gemini-extract",
+      "name": "Gemini Extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-40, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Normalize Input').item.json.google_api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"inlineData\": {\n            \"mimeType\": \"{{ $binary.pdf?.mimeType ?? 'application/pdf' }}\",\n            \"data\": \"{{ $binary.pdf.data }}\"\n          }\n        },\n        {\n          \"text\": \"Extract structured highlights from the uploaded PDF while respecting safety rules.\\nPrompt: {{ $('Normalize Input').item.json.prompt }}\"\n        }\n      ]\n    }\n  ],\n  \"systemInstruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are an expert AI for structured data extraction. Your ONLY output MUST be a single, valid JSON object. NEVER output conversational text, summaries, or any text outside of the JSON structure.\\n\\nYour output MUST conform to this schema: {\\\"topic\\\": string, \\\"key_points\\\": [{\\\"point\\\": string, \\\"source\\\": string}]}\\n\\nRules:\\n1. Analyze the document deeply.\\n2. Every 'point' MUST be a direct quote or close paraphrase from the document.\\n3. The 'source' MUST be precise (e.g., 'Page 5, Section 3.2').\\n4. Do not invent information.\"\n      }\n    ]\n  }\n}"
+      }
+    },
+    {
+      "id": "parse-extraction",
+      "name": "Parse Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [220, 200],
+      "parameters": {
+        "jsCode": "const response = $input.first().json || {};\nlet rawText = '';\nif (response?.candidates?.[0]?.content?.parts?.[0]?.text) {\n  rawText = response.candidates[0].content.parts[0].text;\n}\nlet cleaned = rawText;\nif (rawText.includes('SYSTEM PROMPT ENDS')) {\n  cleaned = rawText.split('SYSTEM PROMPT ENDS').pop().trim();\n}\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  parsed = { error: 'Failed to parse extraction', raw: cleaned };\n}\nreturn [{ json: parsed }];\n"
+      }
+    },
+    {
+      "id": "gemini-script",
+      "name": "Gemini Script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Normalize Input').item.json.google_api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"ROLE & GOAL\\nYou are a creative and concise YouTube Shorts scriptwriter. Transform the provided key points into a compelling, visually-driven video script under 60 seconds. Use doodle and whiteboard-style animation ideas.\\n\\nCONSTRAINTS\\n- Total narration under 150 words.\\n- Each scene narration 10-15 words.\\n- Visual ideas must be simple doodles.\\n- Minimize on-screen text.\\n- Respond ONLY with valid JSON.\\n\\nTASK\\nProduce an object with: title, total_word_count, and scenes[{narration, visual_idea, source_citation}].\\n\\nKEY POINTS\\n{{ JSON.stringify($('Parse Extraction').item.json) }}\\n\\nUSER PROMPT\\n{{ $('Normalize Input').item.json.prompt }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0\n  }\n}"
+      }
+    },
+    {
+      "id": "parse-script",
+      "name": "Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, 200],
+      "parameters": {
+        "jsCode": "const response = $input.first().json || {};\nlet text = '';\nif (response?.candidates?.[0]?.content?.parts?.[0]?.text) {\n  text = response.candidates[0].content.parts[0].text;\n}\nlet parsed;\ntry {\n  parsed = JSON.parse(text);\n} catch (error) {\n  parsed = { error: 'Failed to parse script', raw: text };\n}\nreturn [{ json: parsed }];\n"
+      }
+    },
+    {
+      "id": "build-video-prompt",
+      "name": "Build Video Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 200],
+      "parameters": {
+        "jsCode": "const script = $input.first().json || {};\nconst title = script.title || 'Generated Video Summary';\nconst scenes = Array.isArray(script.scenes) ? script.scenes : [];\nconst lines = scenes.map((scene, idx) => {\n  const narration = scene.narration || '';\n  const visual = scene.visual_idea || narration;\n  return `Scene ${idx + 1}: ${visual}. Narration: ${narration}`;\n});\nconst joinedScenes = lines.join(' ');\nconst prompt = [\n  'Create a 55-second doodle and freehand whiteboard-style animation.',\n  'Use clean line art, sketch fills, and simple character motion.',\n  'Keep the pacing energetic and match narration beats to visuals.',\n  'Emphasize cited facts from the source material when possible.',\n  'Avoid text overlays beyond occasional labels or arrows.'\n].join(' ') + ` Scenes: ${joinedScenes}`;\nreturn [{ json: { video_prompt: prompt, scene_lines: lines, title, script } }];\n"
+      }
+    },
+    {
+      "id": "start-veo-job",
+      "name": "Start Veo Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1260, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Normalize Input').item.json.google_api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({\n  instances: [\n    {\n      prompt: $('Build Video Prompt').item.json.video_prompt\n    }\n  ],\n  parameters: {\n    aspectRatio: '16:9',\n    sampleCount: 1,\n    durationSeconds: 55,\n    personGeneration: 'ALLOW_ALL'\n  }\n}) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-Api-Client",
+              "value": "n8n-rest-api-v1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "wait-veo",
+      "name": "Wait for Veo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1520, 200],
+      "parameters": {
+        "amount": 12
+      }
+    },
+    {
+      "id": "check-veo-status",
+      "name": "Check Veo Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/' + $json.name }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "={{ $('Normalize Input').item.json.google_api_key }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "veo-done",
+      "name": "Veo Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2040, 200],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.done }}",
+              "operation": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "rightValue": true
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false
+          }
+        }
+      }
+    },
+    {
+      "id": "download-video",
+      "name": "Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2300, 140],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.response.generateVideoResponse.generatedSamples[0].video.uri + '&key=' + $('Normalize Input').item.json.google_api_key }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "veo_video"
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "upload-supabase",
+      "name": "Upload to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2560, 140],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kpzphxksscudlwtxayvc.supabase.co/functions/v1/n8n-file-upload",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Normalize Input').item.json.supabase_api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "veo_video",
+              "fileName": "generated_video.mp4"
+            },
+            {
+              "parameterType": "formData",
+              "name": "title",
+              "value": "={{ $('Build Video Prompt').item.json.title }}"
+            },
+            {
+              "parameterType": "formData",
+              "name": "prompt",
+              "value": "={{ $('Build Video Prompt').item.json.video_prompt }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "assemble-response",
+      "name": "Assemble Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2820, 140],
+      "parameters": {
+        "jsCode": "const upload = $input.first().json || {};\nconst script = $('Parse Script').item.json || {};\nconst prompt = $('Build Video Prompt').item.json.video_prompt;\nconst url = upload.publicUrl || upload.url || upload.downloadUrl || upload.signedUrl || '';\nreturn [{ json: {\n  status: 'success',\n  download_url: url,\n  script,\n  video_prompt: prompt\n}}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Incoming Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Gemini Extract",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Extract": {
+      "main": [
+        [
+          {
+            "node": "Parse Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Extraction": {
+      "main": [
+        [
+          {
+            "node": "Gemini Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Script": {
+      "main": [
+        [
+          {
+            "node": "Parse Script",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Script": {
+      "main": [
+        [
+          {
+            "node": "Build Video Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Video Prompt": {
+      "main": [
+        [
+          {
+            "node": "Start Veo Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Veo Job": {
+      "main": [
+        [
+          {
+            "node": "Wait for Veo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait for Veo": {
+      "main": [
+        [
+          {
+            "node": "Check Veo Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Veo Status": {
+      "main": [
+        [
+          {
+            "node": "Veo Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Veo Done?": {
+      "main": [
+        [
+          {
+            "node": "Download Video",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait for Veo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Video": {
+      "main": [
+        [
+          {
+            "node": "Upload to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Assemble Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "meta": {
+    "instanceId": "workflow-runtime-supabase-veo"
+  }
+}

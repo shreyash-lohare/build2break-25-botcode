@@ -183,16 +183,24 @@
         }
 
         input[type="password"],
-        input[type="text"] {
+        input[type="text"],
+        textarea {
             width: 100%;
             padding: 0.75rem 1rem;
             border: 1px solid #cbd5e1;
             border-radius: 0.5rem;
             font-size: 1rem;
             transition: all 0.2s;
+            font-family: inherit;
         }
 
-        input:focus {
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        input:focus,
+        textarea:focus {
             outline: none;
             border-color: #0f172a;
             box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.1);
@@ -375,6 +383,43 @@
         .video-info p:last-child {
             margin-bottom: 0;
         }
+
+        .script-info {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+        }
+
+        .script-info h3 {
+            font-size: 1rem;
+            color: #0f172a;
+            margin-bottom: 0.75rem;
+        }
+
+        .script-info p {
+            color: #475569;
+            font-size: 0.875rem;
+            margin-bottom: 0.75rem;
+        }
+
+        #script-scenes {
+            list-style: decimal;
+            margin-left: 1.25rem;
+            color: #475569;
+        }
+
+        #script-scenes li {
+            margin-bottom: 0.75rem;
+            line-height: 1.4;
+        }
+
+        #script-scenes li .scene-meta {
+            display: block;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
     </style>
 </head>
 <body>
@@ -429,6 +474,11 @@
             <div class="form-group">
                 <label for="elevenlabs-api">ElevenLabs API Key</label>
                 <input type="password" id="elevenlabs-api" placeholder="Enter your ElevenLabs API key">
+            </div>
+
+            <div class="form-group">
+                <label for="video-prompt">Video Goal / Prompt</label>
+                <textarea id="video-prompt" placeholder="Describe what you'd like the video to highlight (optional)"></textarea>
             </div>
 
             <button class="btn btn-primary full-width" onclick="submitApis()">Continue to Upload</button>
@@ -496,6 +546,13 @@
                 <p>Style: Doodle and freehand animations</p>
             </div>
 
+            <div class="script-info hidden" id="script-section">
+                <h3>Script Outline</h3>
+                <p><strong>Title:</strong> <span id="script-title">--</span></p>
+                <p><strong>Total Narration Word Count:</strong> <span id="script-word-count">--</span></p>
+                <ul id="script-scenes"></ul>
+            </div>
+
             <div class="button-group">
                 <button class="btn btn-secondary" onclick="resetForNewVideo()">Generate Another Video</button>
                 <button class="btn btn-primary" onclick="downloadVideo()">
@@ -515,8 +572,10 @@
             supabase: '',
             elevenlabs: ''
         };
-        let selectedFile = null;
-        let videoUrl = null;
+    let selectedFile = null;
+    let videoUrl = null;
+    let userPrompt = '';
+    let scriptData = null;
 
         function showError(message) {
             const errorDiv = document.getElementById('error-notification');
@@ -538,6 +597,7 @@
             const gemini = document.getElementById('gemini-api').value;
             const supabase = document.getElementById('supabase-api').value;
             const elevenlabs = document.getElementById('elevenlabs-api').value;
+            const promptField = document.getElementById('video-prompt');
 
             if (!gemini.trim() || !supabase.trim() || !elevenlabs.trim()) {
                 showError('All API keys are required');
@@ -545,6 +605,7 @@
             }
 
             apis = { gemini, supabase, elevenlabs };
+            userPrompt = promptField.value.trim() || 'Create a short onboarding-style video summary for this resume.';
             
             // Update UI to step 2
             document.getElementById('step1').classList.add('hidden');
@@ -607,7 +668,7 @@
             }
         }
 
-        function generateVideo() {
+        async function generateVideo() {
             if (!selectedFile) {
                 showError('Please upload a PDF file first');
                 return;
@@ -621,29 +682,42 @@
             generateText.classList.add('hidden');
             generateLoading.classList.remove('hidden');
 
-            // Simulate processing - replace with actual API call to n8n workflow
-            setTimeout(() => {
+            // Use a relative path; NGINX will proxy /webhook/* to the backend service
+            const WEBHOOK_URL = '/webhook/generate';
+            try {
+                const formData = new FormData();
+                formData.append('pdf', selectedFile);
+                formData.append('gemini_api_key', apis.gemini || '');
+                formData.append('supabase_api_key', apis.supabase || '');
+                formData.append('elevenlabs_api_key', apis.elevenlabs || '');
+                formData.append('prompt', userPrompt);
+
+                const resp = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(text || `Request failed with status ${resp.status}`);
+                }
+
+                const data = await resp.json();
+                if (!data || !data.download_url) {
+                    throw new Error('Unexpected response from backend');
+                }
+
+                videoUrl = data.download_url;
+                scriptData = data.script || null;
+                showVideoResult();
+            } catch (err) {
+                console.error(err);
+                showError(`Failed to generate video: ${err.message}`);
+            } finally {
                 generateBtn.disabled = false;
                 generateText.classList.remove('hidden');
                 generateLoading.classList.add('hidden');
-                
-                // Simulate video generation (replace with actual video URL from your API)
-                videoUrl = 'https://www.w3schools.com/html/mov_bbb.mp4'; // Demo video
-                showVideoResult();
-                
-                // Here you would make your actual API call:
-                // fetch('YOUR_N8N_WEBHOOK_URL', {
-                //     method: 'POST',
-                //     body: JSON.stringify({
-                //         apis: apis,
-                //         file: selectedFile
-                //     })
-                // }).then(response => response.json())
-                //   .then(data => {
-                //       videoUrl = data.videoUrl;
-                //       showVideoResult();
-                //   });
-            }, 2000);
+            }
         }
 
         function showVideoResult() {
@@ -662,13 +736,58 @@
             // Set video source
             const video = document.getElementById('generated-video');
             video.src = videoUrl;
-            
+
             // Get video duration when metadata loads
             video.addEventListener('loadedmetadata', function() {
                 document.getElementById('video-duration').textContent = Math.round(video.duration);
-            });
-            
+            }, { once: true });
+
+            renderScript();
             showSuccess('Video generated successfully!');
+        }
+
+        function renderScript() {
+            const section = document.getElementById('script-section');
+            const titleEl = document.getElementById('script-title');
+            const wordCountEl = document.getElementById('script-word-count');
+            const sceneList = document.getElementById('script-scenes');
+
+            if (!scriptData || scriptData.error) {
+                section.classList.add('hidden');
+                titleEl.textContent = '--';
+                wordCountEl.textContent = '--';
+                sceneList.innerHTML = '';
+                return;
+            }
+
+            titleEl.textContent = scriptData.title || 'Untitled Video';
+            wordCountEl.textContent = scriptData.total_word_count ?? '—';
+
+            sceneList.innerHTML = '';
+            if (Array.isArray(scriptData.scenes) && scriptData.scenes.length) {
+                scriptData.scenes.forEach((scene, idx) => {
+                    const li = document.createElement('li');
+                    const narration = scene.narration || 'Narration unavailable';
+                    const visual = scene.visual_idea || 'Visual idea unavailable';
+                    const citation = scene.source_citation || null;
+
+                    li.innerHTML = `<strong>Scene ${idx + 1}:</strong> ${narration}<br><em>Visual:</em> ${visual}`;
+                    if (citation) {
+                        const meta = document.createElement('span');
+                        meta.className = 'scene-meta';
+                        meta.textContent = `Source: ${citation}`;
+                        li.appendChild(meta);
+                    }
+
+                    sceneList.appendChild(li);
+                });
+            } else {
+                const li = document.createElement('li');
+                li.textContent = 'No scenes returned by the workflow.';
+                sceneList.appendChild(li);
+            }
+
+            section.classList.remove('hidden');
         }
 
         function downloadVideo() {
@@ -699,6 +818,8 @@
             document.getElementById('file-info').classList.add('hidden');
             document.getElementById('upload-area').classList.remove('has-file');
             document.getElementById('generate-btn').disabled = true;
+            scriptData = null;
+            renderScript();
             
             // Go back to step 2
             document.getElementById('step3').classList.add('hidden');
@@ -720,6 +841,8 @@
             document.getElementById('step2').classList.add('hidden');
             document.getElementById('step3').classList.add('hidden');
             document.getElementById('step1').classList.remove('hidden');
+
+            document.getElementById('video-prompt').value = userPrompt;
             
             // Update progress indicators
             document.getElementById('step2-circle').classList.remove('active');
@@ -740,11 +863,13 @@
             // Reset everything
             selectedFile = null;
             videoUrl = null;
+            userPrompt = '';
             
             // Reset form fields
             document.getElementById('gemini-api').value = '';
             document.getElementById('supabase-api').value = '';
             document.getElementById('elevenlabs-api').value = '';
+            document.getElementById('video-prompt').value = '';
             document.getElementById('file-input').value = '';
             
             // Reset upload area
@@ -752,6 +877,8 @@
             document.getElementById('file-info').classList.add('hidden');
             document.getElementById('upload-area').classList.remove('has-file');
             document.getElementById('generate-btn').disabled = true;
+            scriptData = null;
+            renderScript();
             
             // Go back to step 1
             document.getElementById('step3').classList.add('hidden');
