@@ -52,14 +52,23 @@ This command will:
 
 ## 🧩 How It Works
 
-### 🧠 Agent Roles (inside n8n)
+Generating a Video-
+	
+	Enter API Keys (Step 1)
+		Input your Google Gemini API key
+		Input your Supabase API key
+		Input your ElevenLabs API key
+		Click "Continue to Upload"
 
-- TalentScout Agent — extracts candidate info from PDF (Resume Screening)
-- Onboarder Agent — creates onboarding tasks & timeline
-- PolicyBot — answers HR policy questions
-- VideoMaker Agent — generates short doodle-style or avatar video summary
+	Upload PDF (Step 2)
+		Click the upload area or drag-and-drop your PDF
+		Maximum file size: 20 MB
+		Click "Generate Video Summary"
 
-Each role is an n8n workflow connected through triggers and memory nodes.
+	View & Download (Step 3)-
+		Watch the generated video preview
+		Download the MP4 file
+		Generate another video or change API keys
 
 ### 🧪 Test Workflow
 
@@ -68,9 +77,9 @@ You can test the pipeline in two ways:
 1️⃣ Through Frontend
 
 - Visit http://localhost:8080
-- Upload a sample PDF (e.g., data/sample_resume.pdf)
 - Enter your Google Gemini, Supabase, and ElevenLabs API keys when prompted (Step 1 of the UI)
 - Add an optional video prompt to guide the script
+- Upload a sample PDF
 - Click “Generate Video”
 - Wait for the generated script and download link to appear
 
@@ -153,9 +162,9 @@ Data Flow: Frontend → /webhook/generate (n8n) → Agents → Video file → /f
 
 ## 🏁 Credits
 
-Team: YourTeamName  
+Team: BotCode
 Event: Build2Break 2025 (OSDG, IIIT Hyderabad)  
-Problem Track: #3 — Multi-Agent Automation  
+Problem Track: #3 Multi-Agent Automation  
 Tech Stack: n8n, Docker, NGINX, Postgres, OpenAI API
 
 ---
