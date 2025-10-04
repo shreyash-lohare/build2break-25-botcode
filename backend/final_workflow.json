@@ -1,0 +1,746 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "prompt form",
+        "formDescription": "asd",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "prompt",
+              "placeholder": "enter a request for video",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "pdf",
+              "fieldType": "file",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "buttonLabel": "Submit"
+        }
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -5392,
+        128
+      ],
+      "id": "ed283ddb-ec65-4b2b-98e2-24ee942b7efe",
+      "name": "On form submission",
+      "webhookId": "a88cb3b2-c42a-4594-ad97-7c49fbc4e0d0"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "fileUrl": "={{ $json.publicUrl }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -4944,
+        128
+      ],
+      "id": "689522f3-ce6b-4685-881d-ceb16423c310",
+      "name": "Upload a file",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6CSvubRfgRyhUNwP",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://kpzphxksscudlwtxayvc.supabase.co/functions/v1/file-handler",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwenBoeGtzc2N1ZGx3dHhheXZjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU4MDgzNiwiZXhwIjoyMDc1MTU2ODM2fQ.4b5DAOmNxlFktoCrI9wKhC6Y5wjOWGpcUVMDyMrotz4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "=pdf"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -5168,
+        128
+      ],
+      "id": "1c23676a-00a1-4081-976d-a1212f668322",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-goog-api-key",
+              "value": "AIzaSyAdAt_uiRVQp0G86ter5w-bFa6YnCb5Iks"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"fileData\": {\n            \"mimeType\": \"{{ $('Upload a file').item.json.mimeType }}\",\n            \"fileUri\": \"{{ $('Upload a file').item.json.fileUri }}\"\n          }\n        },\n        {\n          \"text\": \"User's special needs (only allow if it doesnt go beyond safety policies):{{ $('On form submission').item.json.prompt }}\"\n        }\n      ]\n    }\n  ],\n  \"systemInstruction\": {\n    \"parts\": [\n      {\n        \"text\": \"You are an expert AI for structured data extraction. Your ONLY output MUST be a single, valid JSON object. NEVER output conversational text, summaries, or any text outside of the JSON structure. DONOT MISS A SINGLE POINT DURING DATA EXTRACTION.\\n\\nYour output MUST conform to this schema: {\\\"topic\\\": string, \\\"key_points\\\": [{\\\"point\\\": string, \\\"source\\\": string}]}\\n\\nRules:\\n1. Analyze the document at a university-level depth unless the user specifies otherwise.\\n2. Every 'point' MUST be a direct quote or a very close paraphrase from the document.\\n3. The 'source' MUST be as precise as possible (e.g., 'Page 5, Section 3.2').\\n4. Do not invent information or use external knowledge.\\n\\nExample of required output format:\\n{\\\"topic\\\":\\\"Dopamine & Motivation\\\",\\\"key_points\\\":[{\\\"point\\\":\\\"Dopamine is released in anticipation of a reward, driving motivation.\\\",\\\"source\\\":\\\"Page 2, Para 1\\\"}]}\\n\\nBegin analysis.\"\n      }\n    ]\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -4720,
+        128
+      ],
+      "id": "f062940f-1c2f-41dc-95b6-e82bfad5b68b",
+      "name": "HTTP Request1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6CSvubRfgRyhUNwP",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "42fa1acd-bca0-4d30-96cf-0f52d8428fb5",
+              "name": "response",
+              "value": "={{ $json.candidates[0].content.parts[0].text.split(\"SYSTEM PROMPT ENDS\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -4496,
+        128
+      ],
+      "id": "4c86c1c1-9610-4f94-b856-8bddedf37b1b",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.5-flash",
+          "mode": "list",
+          "cachedResultName": "models/gemini-2.5-flash"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=ROLE & GOAL\n\nYou are a creative and concise YouTube Shorts scriptwriter. Your mission is to transform a set of key points from a PDF into a compelling, visually-driven video script that is under 60 seconds long. The final video will use doodle and freehand whiteboard-style animations, so your visual ideas must be simple and clear.\n\nCONSTRAINTS\n\n    Total Narration: The total word count for the narration across all scenes MUST be under 150 words.\n\n    Scene Narration Length: The narration for each individual scene MUST be extremely concise, approximately 10-15 words long, to fit a 5-second video clip. This is a strict requirement.\n\n    Visual Style: The visual ideas MUST be describable as simple doodles, sketches, or whiteboard drawings. Do not suggest complex animations or realistic images.\n\n    Minimize On-Screen Text: The script should rely on visuals and narration, not text overlays.\n\n    Output Format: You MUST respond with a single, clean JSON object and nothing else. Do not include any introductory text, apologies, or explanations outside of the JSON structure.\n\nTASK\n\nGiven the following key points from a document, perform these steps:\n\n    Create a short, catchy title for the video.\n\n    Structure the script into an array of scenes.\n\n    For each scene:\n    a. Write a narration line. It must be conversational, easy to understand, and strictly between 10 and 15 words.\n    b. Create a visual_idea. Describe a simple doodle or sketch that visually represents the narration. Be descriptive (e.g., \"A hand draws a lightbulb that turns on,\" \"An animated bar chart quickly grows\").\n    c. Include the source_citation from the input that corresponds to the information in the scene. If a scene is introductory or transitional, the citation can be null.\n\n    Calculate the total_word_count of all narration combined.\n\n    Return this entire structure as a single, valid JSON object.\n\nINPUT DATA\n{{ $json.response }}",
+              "role": "model"
+            },
+            {
+              "content": "=User needs: {{ $('On form submission').item.json.prompt }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        -4272,
+        128
+      ],
+      "id": "058424b7-0d59-462e-ad55-25c141dccdec",
+      "name": "Message a model",
+      "retryOnFail": false,
+      "waitBetweenTries": 5000,
+      "executeOnce": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "6CSvubRfgRyhUNwP",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// This script takes the structured JSON output from a previous step,\n// which contains a title and an array of scenes, and prepares it for\n// scene-by-scene video generation. It outputs an array of items, where\n// each item corresponds to a single scene with its own formatted prompt.\n\n// This assumes the previous node's output contains the Gemini API response.\n// $input.first() is a safe way to get the first item.\nconst geminiApiResponse = $input.first().json;\n\ntry {\n  // 1. Extract and parse the nested JSON string from the Gemini response.\n  const scriptData = JSON.parse(geminiApiResponse.content.parts[0].text);\n\n  // 2. DEFINE THE CONSISTENT STYLE GUIDE\n  // This is the key to making all scenes look like they belong together.\n  // We define it once and apply it to every scene's prompt.\n  const styleGuide = \"The animation style is a clean, minimalist whiteboard animation. All elements are simple 2D doodles drawn with a single black line on a white background. Characters should be simple stick figures with expressive, simple faces. Use smooth, hand-drawn-style motion.\";\n\n  // 3. Map over each scene in the script to create a new, separate output item for each one.\n  const sceneItems = scriptData.scenes.map(scene => {\n    \n    // 4. Construct the prompt, now including the consistent style guide.\n    // The prompt tells the model WHAT to draw (the visual_idea) and HOW to draw it (the styleGuide).\n    const video_prompt = `An animated video scene in a consistent style. Scene description: \"${scene.visual_idea}\". The style MUST strictly adhere to the following guide: '${styleGuide}'. The animation must not contain any text, words, or subtitles.`;\n\n    // 5. Return a new n8n item structure for this scene. The next nodes in the\n    //    workflow will now run once for each of these returned items.\n    return {\n      json: {\n        video_prompt: video_prompt,\n        // We still carry over the narration text for the Text-to-Speech step later.\n        narration_text: scene.narration \n      }\n    };\n  });\n\n  // 6. Return the complete array of scene items.\n  return sceneItems;\n\n} catch (error) {\n  // 7. If the input from Gemini is not valid JSON, this block will catch the error,\n  //    preventing the workflow from crashing and returning a single item with an error message.\n  return [{\n    json: {\n      error: `Failed to parse script. Error: ${error.message}`,\n      originalResponse: geminiApiResponse.content.parts[0].text\n    }\n  }];\n}\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3920,
+        128
+      ],
+      "id": "63c5ab1e-8c89-48be-8549-c250f44305d6",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -2480,
+        160
+      ],
+      "id": "4fe178c5-56c3-411b-9167-38630d44c915",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 60
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -3472,
+        128
+      ],
+      "id": "987057ec-a3eb-44c0-917e-f48bce537935",
+      "name": "Wait1",
+      "webhookId": "d483f615-0a9c-432a-a332-bbaf785f62c6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "82a94a19-6131-497e-9216-bbd91626cc4e",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "27f7cfcf-66c2-4594-9213-b8b78a35bfc9",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -3024,
+        48
+      ],
+      "id": "23e3167e-98e7-45bb-a314-aeabf069a79e",
+      "name": "if all scenes ready",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "url": "={{$json.response.generateVideoResponse.generatedSamples[0].video.uri }}&key=AIzaSyAdAt_uiRVQp0G86ter5w-bFa6YnCb5Iks",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "final_video.mp4"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2800,
+        -48
+      ],
+      "id": "5b1cbf96-b0c2-474a-9348-329a38e011ae",
+      "name": "Get video links",
+      "executeOnce": false,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -2800,
+        144
+      ],
+      "id": "90b9a6f5-c9c0-4938-9f99-3d2f0c493012",
+      "name": "Wait2",
+      "webhookId": "48388388-491e-48f8-8ba5-8a7671d12bcf"
+    },
+    {
+      "parameters": {
+        "url": "=https://generativelanguage.googleapis.com/v1beta/{{ $json.name }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyAdAt_uiRVQp0G86ter5w-bFa6YnCb5Iks"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3216,
+        80
+      ],
+      "id": "270a50ba-d92d-414f-8d3a-af39174211c1",
+      "name": "HTTP Request4"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning",
+        "sendQuery": true,
+        "specifyQuery": "=keypair",
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "key",
+              "value": "AIzaSyAdAt_uiRVQp0G86ter5w-bFa6YnCb5Iks"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Goog-Api-Client",
+              "value": "n8n-rest-api-v1"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"instances\": [\n    {\n      \"prompt\": \"{{ $json.video_prompt.replaceAll('\"',\"'\") }}\"\n    }\n  ],\n  \"parameters\": {\n    \"aspectRatio\": \"16:9\",\n    \"sampleCount\": 1,\n    \"durationSeconds\": 8,\n    \"personGeneration\": \"ALLOW_ALL\"\n  }\n}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 10000
+            }
+          },
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3696,
+        128
+      ],
+      "id": "2444aaff-ae37-4baa-81dd-90965eaa4f9d",
+      "name": "HTTP Request3",
+      "executeOnce": false,
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the data from the previous node\nconst modelResponse = $json;\n\n// CORRECTED: Get the text directly from the correct path (no 'candidates')\nconst scriptText = modelResponse.content.parts[0].text;\n\n// Clean the text to remove markdown code fences if they exist\nconst cleanedText = scriptText.replace(/^```json\\n|```$/g, '');\n\n// Convert the cleaned text string into a real JSON object\nconst finalScript = JSON.parse(cleanedText);\n\n// Get an array of all narration texts and filter out any empty or null ones\nconst allNarrations = finalScript.scenes\n  .map(scene => scene.narration)\n  .filter(Boolean);\n\n// Join them into a single string, separated by a space\nconst fullNarrationText = allNarrations.join(' ');\n\n// Add this new combined text to the output object\nfinalScript.fullNarration = fullNarrationText;\n\n// Return the final object for the next node to use\nreturn finalScript;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3664,
+        464
+      ],
+      "id": "5b705bae-c52e-4e7a-b5f6-d6b0c6dc2492",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.elevenlabs.io/v1/text-to-speech/wSO34DbFKBGmeCNpJL5K",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "sk_686f93e4f619240b8d815dc516025cbe24b5fb306fe1d32d"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $('Code in JavaScript2').item.json.fullNarration }}\",\n  \"model_id\": \"eleven_multilingual_v2\",\n  \"voice_settings\": {\n    \"stability\": 0.5,\n    \"similarity_boost\": 0.75\n  }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -3280,
+        464
+      ],
+      "id": "8efebc11-9a55-4082-adda-614a53f8fb59",
+      "name": "HTTP Request5",
+      "retryOnFail": true,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://kpzphxksscudlwtxayvc.supabase.co/functions/v1/file-handler",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtwenBoeGtzc2N1ZGx3dHhheXZjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1OTU4MDgzNiwiZXhwIjoyMDc1MTU2ODM2fQ.4b5DAOmNxlFktoCrI9wKhC6Y5wjOWGpcUVMDyMrotz4"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "=final_video.mp4"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -2464,
+        -48
+      ],
+      "id": "f985e2c5-0f53-4542-9821-597cec796529",
+      "name": "HTTP Request6"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -2032,
+        432
+      ],
+      "id": "261739f7-4f28-4154-a199-f98d1786c275",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "command": "=ffmpeg -i data -i data_1 -i data_2 -i data_3 -i data_4 -i data_5 -i data_6 -filter_complex \"[0:v][1:v][2:v][3:v][4:v][5:v]concat=n=6:v=1:a=0[v]\" -map \"[v]\" -map 6:a -c:v libx264 -c:a aac -shortest final_video.mp4"
+      },
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -1824,
+        432
+      ],
+      "id": "84737106-fadb-4c7d-b700-7bf098cdf54d",
+      "name": "Execute Command"
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a file": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Upload a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "if all scenes ready": {
+      "main": [
+        [
+          {
+            "node": "Get video links",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get video links": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request4": {
+      "main": [
+        [
+          {
+            "node": "if all scenes ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Wait1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request6": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {
+    "Wait1": [
+      {
+        "name": "models/veo-2.0-generate-001/operations/mwlhcs79lrow"
+      },
+      {
+        "name": "models/veo-2.0-generate-001/operations/ns7pi6gm7841"
+      },
+      {
+        "name": "models/veo-2.0-generate-001/operations/sf7cmy9nfmsk"
+      },
+      {
+        "name": "models/veo-2.0-generate-001/operations/7dpjvquczo4k"
+      },
+      {
+        "name": "models/veo-2.0-generate-001/operations/7v2ma85wl7oy"
+      },
+      {
+        "name": "models/veo-2.0-generate-001/operations/ewsjq299ey1z"
+      }
+    ]
+  },
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a06370c1558bdfcb1f62c6257da0d3623c935a386284d4ca6422330528756397"
+  }
+}
