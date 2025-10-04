@@ -1,0 +1,88 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/visuals",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c38fbfdf-d70b-49f9-b89d-c8558e27cd0d",
+      "name": "Webhook",
+      "webhookId": "95576ab0-0d7f-4604-ab56-d05da1eeb27a"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// This processes the JSON from VisualsPlanner\nconst inputData = $input.all();\nconst visualPlan = inputData[0].json;\n\nreturn visualPlan.visualPlan.map(scene => ({\n  json: {\n    sceneNumber: scene.sceneNumber,\n    timestamp: scene.timestamp,\n    duration: scene.duration,\n    visualType: scene.visualType,\n    description: scene.description,\n    keywords: scene.searchKeywords,\n    citation: scene.citation,\n    animationConfig: scene.animationConfig\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "469c3fc8-0e0b-4166-94bf-084e7208f249",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "=Body:\n{\n  \"text_prompts\": [\n    { \"text\": \"{{$json.description}}, doodle style, hand-drawn, sketch\" }\n  ],\n  \"style_preset\": \"line-art\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "6910b475-1475-4c24-a846-bf1426ef24e1",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "WrdFTh3o8K9wi0A0",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "a06370c1558bdfcb1f62c6257da0d3623c935a386284d4ca6422330528756397"
+  }
+}
