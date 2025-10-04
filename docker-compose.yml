@@ -45,6 +45,8 @@ services:
       # Webhook and file storage paths
       - N8N_PATH=/home/node/.n8n
       - N8N_DISABLE_PRODUCTION_MAIN_PROCESS=false
+      - N8N_IMPORT_FILE=/home/node/.n8n/workflows/pdf-to-video.workflow.json
+      - N8N_IMPORT_REPLACE_EXISTING=true
 
     volumes:
       - n8n_data:/home/node/.n8n
