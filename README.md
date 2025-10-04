@@ -85,18 +85,30 @@ You can test the pipeline in two ways:
 - Click “Generate Video”
 - Wait for the generated script and download link to appear
 
-2️⃣ Through Direct Webhook
+2️⃣ Through Direct Webhook (Standalone n8n Backup)
 
-You can also trigger the workflow directly via the webhook endpoint.
+You can hit the workflow directly—either via the main stack (port 5000) or by running the self-contained `direct-n8n` compose file if the frontend is down.
 
-    Run n8n on your computer:
-    Then start n8n:
-        direct-n8n/n8n-workflow.json has code for the final n8n workflow.
+**Option A – Use the full stack:**
 
-Optional example:
+- Start with `docker-compose up --build` from the repo root.
+- Send requests to `http://localhost:5000/webhook/generate` (the same URL the frontend proxies to).
+
+**Option B – Run the direct-n8n container (no frontend required):**
+
+1. `cd direct-n8n`
+2. `cp .env.example .env` and paste your runtime keys:
+	- `GEMINI_API_KEY=` (covers Gemini + Veo)
+	- `SUPABASE_KEY=` (service-role or edge-function token)
+	- `ELEVENLABS_KEY=` (optional for future narration work)
+3. `docker compose up --pull always`
+4. Open http://localhost:5678, import `workflows/pdf-to-video.workflow.json` if it isn’t listed, and click **Activate**.
+5. POST to `http://localhost:5678/webhook/generate`.
+
+Optional example (swap the URL to `http://localhost:5000/...` if you’re using Option A):
 
 ```bash
-curl -X POST http://localhost:5000/webhook/generate \
+curl -X POST http://localhost:5678/webhook/generate \
 	-F "pdf=@data/sample_resume.pdf" \
 	-F "gemini_api_key=your-google-key" \
 	-F "supabase_api_key=your-supabase-service-role" \
@@ -109,17 +121,19 @@ Response:
 ```json
 {
 	"status": "success",
-	"download_url": "https://www.w3schools.com/html/mov_bbb.mp4",
+	"download_url": "https://kpzphxksscudlwtxayvc.supabase.co/storage/v1/object/sign/...",
 	"script": {
 		"title": "...",
+		"total_word_count": 142,
 		"scenes": [
 			{
 				"narration": "...",
 				"visual_idea": "...",
-				"source_citation": "..."
+				"source_citation": "Page 3"
 			}
 		]
-	}
+	},
+	"video_prompt": "..."
 }
 ```
 
@@ -128,13 +142,24 @@ Response:
 ```
 b2b-video-generator/
 ├── frontend/
+│   ├── Dockerfile
 │   ├── index.html
+│   ├── nginx.conf
 │   ├── script.js
-│   ├── styles.css
-│   └── Dockerfile
+│   └── styles.css
 ├── backend/
 │   ├── Dockerfile
-│   └── workflow.json
+│   ├── server.js
+│   ├── workflow.json
+│   └── workflows/
+│       └── pdf-to-video.workflow.json
+├── direct-n8n/
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── README-direct-n8n.md
+│   ├── .env.example
+│   └── workflows/
+│       └── pdf-to-video.workflow.json
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
