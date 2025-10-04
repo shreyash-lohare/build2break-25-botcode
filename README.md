@@ -33,6 +33,8 @@ The `.env` file keeps n8n’s encryption key and timezone settings. **API keys a
 ### ⚙️ Step 3 — Run Everything
 
 ```bash
+sudo apt update
+sudo apt install ffmpeg
 docker-compose up --build
 ```
 
