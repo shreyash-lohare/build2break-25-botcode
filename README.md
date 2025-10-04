@@ -87,6 +87,12 @@ You can test the pipeline in two ways:
 
 2️⃣ Through Direct Webhook
 
+You can also trigger the workflow directly via the webhook endpoint.
+
+    Run n8n on your computer:
+    Then start n8n:
+        direct-n8n/n8n-workflow.json has code for the final n8n workflow.
+
 Optional example:
 
 ```bash

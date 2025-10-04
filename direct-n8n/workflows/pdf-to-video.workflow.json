@@ -1,0 +1,282 @@
+{
+  "name": "PDF → Script → Veo Video",
+  "id": "pdf-to-video-dynamic",
+  "nodes": [
+    {
+      "id": "incoming-request",
+      "name": "Incoming Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [-720, 80],
+      "parameters": {
+        "path": "generate",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {
+          "binaryData": true,
+          "binaryPropertyName": "pdf"
+        }
+      },
+      "webhookId": "build2break-generate"
+    },
+    {
+      "id": "normalize-input",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [-440, 80],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            { "id": "prompt-field", "name": "prompt", "type": "string", "value": "={{ $json.body?.prompt ?? '' }}" },
+            { "id": "google-field", "name": "google_api_key", "type": "string", "value": "={{ $json.body?.gemini_api_key ?? $json.body?.google_api_key ?? '' }}" },
+            { "id": "supabase-field", "name": "supabase_api_key", "type": "string", "value": "={{ $json.body?.supabase_api_key ?? '' }}" },
+            { "id": "eleven-field", "name": "elevenlabs_api_key", "type": "string", "value": "={{ $json.body?.elevenlabs_api_key ?? '' }}" }
+          ]
+        },
+        "options": { "keepOnlySet": false }
+      }
+    },
+    {
+      "id": "ensure-keys",
+      "name": "Ensure Keys",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [-160, 80],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $('Normalize Input').item.json.google_api_key }}",
+              "rightValue": "",
+              "operation": { "type": "string", "operation": "isEmpty" }
+            },
+            {
+              "leftValue": "={{ $('Normalize Input').item.json.supabase_api_key }}",
+              "rightValue": "",
+              "operation": { "type": "string", "operation": "isEmpty" }
+            }
+          ],
+          "combinator": "or",
+          "options": { "caseSensitive": false }
+        }
+      }
+    },
+    {
+      "id": "missing-keys-response",
+      "name": "Missing Keys Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [120, -60],
+      "parameters": {
+        "jsCode": "return [{ json: { status: 'error', message: 'Google Gemini and Supabase keys are required.' } }];"
+      }
+    },
+    {
+      "id": "gemini-extract",
+      "name": "Gemini Extract",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [120, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "key", "value": "={{ $('Normalize Input').item.json.google_api_key }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"inlineData\": {\n            \"mimeType\": \"{{ $binary.pdf?.mimeType ?? 'application/pdf' }}\",\n            \"data\": \"{{ $binary.pdf.data }}\"\n          }\n        },\n        {\n          \"text\": \"Extract structured highlights as JSON only.\\nPrompt: {{ $('Normalize Input').item.json.prompt }}\"\n        }\n      ]\n    }\n  ],\n  \"systemInstruction\": {\n    \"parts\": [\n      {\n        \"text\": \"Return {\\\"topic\\\": string, \\\"key_points\\\": [{\\\"point\\\": string, \\\"source\\\": string}]}. Each point must cite the document location. No extra prose.\"\n      }\n    ]\n  }\n}"
+      }
+    },
+    {
+      "id": "parse-extraction",
+      "name": "Parse Extraction",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 240],
+      "parameters": {
+        "jsCode": "const response = $input.first().json || {};\nlet text = response?.candidates?.[0]?.content?.parts?.[0]?.text || '';\nif (text.startsWith('```')) { text = text.replace(/^```json\\n?|```$/g, '').trim(); }\nif (text.includes('SYSTEM PROMPT ENDS')) { text = text.split('SYSTEM PROMPT ENDS').pop().trim(); }\ntry {\n  return [{ json: JSON.parse(text) }];\n} catch (error) {\n  return [{ json: { status: 'error', message: 'Failed to parse Gemini extract', detail: error.message, raw: text } }];\n}\n"
+      }
+    },
+    {
+      "id": "gemini-script",
+      "name": "Gemini Script",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "key", "value": "={{ $('Normalize Input').item.json.google_api_key }}" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": \"ROLE: You are a concise YouTube Shorts scriptwriter.\\nKeep narration under 150 words total and 10-15 words per scene.\\nUse doodle/whiteboard visual ideas.\\nReturn strictly valid JSON with title, total_word_count, scenes[{narration, visual_idea, source_citation}].\\n\\nKEY POINTS:\\n{{ JSON.stringify($('Parse Extraction').item.json) }}\\n\\nUSER PROMPT:\\n{{ $('Normalize Input').item.json.prompt }}\"\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"responseMimeType\": \"application/json\",\n    \"temperature\": 0\n  }\n}"
+      }
+    },
+    {
+      "id": "parse-script",
+      "name": "Parse Script",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [920, 240],
+      "parameters": {
+        "jsCode": "const response = $input.first().json || {};\nlet text = response?.candidates?.[0]?.content?.parts?.[0]?.text || '';\nif (text.startsWith('```')) { text = text.replace(/^```json\\n?|```$/g, '').trim(); }\ntry {\n  return [{ json: JSON.parse(text) }];\n} catch (error) {\n  return [{ json: { status: 'error', message: 'Failed to parse Gemini script', detail: error.message, raw: text } }];\n}\n"
+      }
+    },
+    {
+      "id": "build-video-prompt",
+      "name": "Build Video Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 240],
+      "parameters": {
+        "jsCode": "const script = $input.first().json || {};\nconst title = script.title || 'Generated Video Summary';\nconst scenes = Array.isArray(script.scenes) ? script.scenes : [];\nconst base = 'Create a 55 second doodle and whiteboard animation with clean black line art on white background. Keep motion simple and synced to narration. Avoid text overlays.';\nconst sceneLines = scenes.map((scene, idx) => {\n  const narration = (scene?.narration || '').trim();\n  const visual = (scene?.visual_idea || narration).trim();\n  return `Scene ${idx + 1}: ${visual}. Narration: ${narration}`;\n}).join(' ');\nconst videoPrompt = `${base} Scenes: ${sceneLines}`;\nreturn [{ json: { video_prompt: videoPrompt, title, script } }];\n"
+      }
+    },
+    {
+      "id": "start-veo-job",
+      "name": "Start Veo Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/veo-2.0-generate-001:predictLongRunning",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "key", "value": "={{ $('Normalize Input').item.json.google_api_key }}" }]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "X-Goog-Api-Client", "value": "n8n-rest-api-v1" }]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"instances\": [{ \"prompt\": $('Build Video Prompt').item.json.video_prompt }], \"parameters\": { \"aspectRatio\": \"16:9\", \"sampleCount\": 1, \"durationSeconds\": 55, \"personGeneration\": \"ALLOW_ALL\" } } }}"
+      }
+    },
+    {
+      "id": "wait-veo",
+      "name": "Wait for Veo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1680, 240],
+      "parameters": { "amount": 12 }
+    },
+    {
+      "id": "check-veo-status",
+      "name": "Check Veo Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 240],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://generativelanguage.googleapis.com/v1beta/' + $json.name }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "key", "value": "={{ $('Normalize Input').item.json.google_api_key }}" }]
+        }
+      }
+    },
+    {
+      "id": "veo-done",
+      "name": "Veo Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [2160, 240],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.done }}",
+              "rightValue": true,
+              "operation": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and",
+          "options": { "caseSensitive": false }
+        }
+      }
+    },
+    {
+      "id": "download-video",
+      "name": "Download Video",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2400, 160],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.response.generateVideoResponse.generatedSamples[0].video.uri + '&key=' + $('Normalize Input').item.json.google_api_key }}",
+        "options": {
+          "response": { "response": { "responseFormat": "file", "outputPropertyName": "veo_video" } }
+        }
+      }
+    },
+    {
+      "id": "upload-supabase",
+      "name": "Upload to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2640, 160],
+      "parameters": {
+        "method": "POST",
+        "url": "https://kpzphxksscudlwtxayvc.supabase.co/functions/v1/file-handler",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Authorization", "value": "=Bearer {{ $('Normalize Input').item.json.supabase_api_key }}" }]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "file", "parameterType": "formBinaryData", "inputDataFieldName": "veo_video", "fileName": "video-summary.mp4" },
+            { "name": "title", "parameterType": "formData", "value": "={{ $('Build Video Prompt').item.json.title }}" },
+            { "name": "prompt", "parameterType": "formData", "value": "={{ $('Normalize Input').item.json.prompt }}" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "assemble-response",
+      "name": "Assemble Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2880, 160],
+      "parameters": {
+        "jsCode": "const upload = $input first().json || {};\nconst script = $('Parse Script').item json || {};\nconst prompt = $('Build Video Prompt').item.json.video_prompt || '';\nconst url = upload.publicUrl || upload.url || upload.downloadUrl || upload.signedUrl || upload.path || '';\nif (!url) {\n  return [{ json: { status: 'error', message: upload.message || 'Failed to upload video to Supabase', detail: upload } }];\n}\nreturn [{ json: { status: 'success', download_url: url, script, video_prompt: prompt } }];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Incoming Request": { "main": [[{ "node": "Normalize Input", "type": "main", "index": 0 }]] },
+    "Normalize Input": { "main": [[{ "node": "Ensure Keys", "type": "main", "index": 0 }]] },
+    "Ensure Keys": {
+      "main": [
+        [{ "node": "Missing Keys Response", "type": "main", "index": 0 }],
+        [{ "node": "Gemini Extract", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gemini Extract": { "main": [[{ "node": "Parse Extraction", "type": "main", "index": 0 }]] },
+    "Parse Extraction": { "main": [[{ "node": "Gemini Script", "type": "main", "index": 0 }]] },
+    "Gemini Script": { "main": [[{ "node": "Parse Script", "type": "main", "index": 0 }]] },
+    "Parse Script": { "main": [[{ "node": "Build Video Prompt", "type": "main", "index": 0 }]] },
+    "Build Video Prompt": { "main": [[{ "node": "Start Veo Job", "type": "main", "index": 0 }]] },
+    "Start Veo Job": { "main": [[{ "node": "Wait for Veo", "type": "main", "index": 0 }]] },
+    "Wait for Veo": { "main": [[{ "node": "Check Veo Status", "type": "main", "index": 0 }]] },
+    "Check Veo Status": { "main": [[{ "node": "Veo Done?", "type": "main", "index": 0 }]] },
+    "Veo Done?": {
+      "main": [
+        [{ "node": "Download Video", "type": "main", "index": 0 }],
+        [{ "node": "Wait for Veo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Video": { "main": [[{ "node": "Upload to Supabase", "type": "main", "index": 0 }]] },
+    "Upload to Supabase": { "main": [[{ "node": "Assemble Response", "type": "main", "index": 0 }]] }
+  },
+  "meta": { "instanceId": "workflow-runtime-gemini-veo-supabase" }
+}
