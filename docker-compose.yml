@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  frontend:
+    build: ./frontend
+    container_name: b2b-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    container_name: b2b-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - HF_TOKEN=${HF_TOKEN}
+      - STORAGE_PATH=/app/videos
+    volumes:
+      - backend_videos:/app/videos
+
+volumes:
+  backend_videos:
