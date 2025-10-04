@@ -77,9 +77,9 @@ You can test the pipeline in two ways:
 1️⃣ Through Frontend
 
 - Visit http://localhost:8080
-- Upload a sample PDF (e.g., data/sample_resume.pdf)
 - Enter your Google Gemini, Supabase, and ElevenLabs API keys when prompted (Step 1 of the UI)
 - Add an optional video prompt to guide the script
+- Upload a sample PDF
 - Click “Generate Video”
 - Wait for the generated script and download link to appear
 
